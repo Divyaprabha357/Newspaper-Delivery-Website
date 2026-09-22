@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import rozLogo from "./assets/roz-logo.png";
 import {
     DashboardIcon,
@@ -18,13 +18,31 @@ import {
     DeliveryVanIcon,
 } from "./Icons";
 import "./CustomerDashboard.css";
+import { customerApi } from "./api";
 
 function CustomerDashboard({ user, onMenuClick, onNavigate }) {
     const [menuOpen, setMenuOpen] = useState(false);
+    const [summary, setSummary] = useState({ subscriptions: [], deliveries: [], payments: [], notifications: [] });
 
     const fullName = user?.name || "Aarav Sharma";
     const firstName = fullName.split(" ")[0];
     const userInitial = firstName.charAt(0).toUpperCase();
+
+    useEffect(() => {
+        if (!user?.customer_id) return;
+        Promise.all([
+            customerApi.subscriptions(user.customer_id), customerApi.deliveries(user.customer_id),
+            customerApi.payments(user.customer_id), customerApi.notifications(user.customer_id),
+        ]).then(([subscriptions, deliveries, payments, notifications]) => setSummary({
+            subscriptions: subscriptions.subscriptions || [], deliveries: deliveries.deliveries || [],
+            payments: payments.payments || [], notifications: notifications.notifications || [],
+        })).catch(() => setSummary({ subscriptions: [], deliveries: [], payments: [], notifications: [] }));
+    }, [user?.customer_id]);
+
+    const latestDelivery = summary.deliveries[0];
+    const activeSubscriptions = summary.subscriptions.filter((item) => item.status === "ACTIVE");
+    const pendingPayment = summary.payments.find((item) => item.bill_status === "PENDING" || item.payment_status === "PENDING");
+    const unreadNotifications = summary.notifications.filter((item) => !Number(item.is_read));
 
     const formattedDate = new Date().toLocaleDateString("en-US", {
         weekday: "long",
@@ -109,7 +127,7 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
                             </span>
                         </div>
                         <span className="delivery-status-timestamp">
-                            Delivered • 07:02 AM
+                            {latestDelivery ? `${String(latestDelivery.item_status || latestDelivery.delivery_status).replace(/_/g, " ")} • ${latestDelivery.actual_time || latestDelivery.scheduled_time || "—"}` : "No delivery recorded"}
                         </span>
                     </div>
 
@@ -123,7 +141,7 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
 
                             <div className="newspaper-title-wrap">
                                 <h2 className="newspaper-headline">
-                                    THE TIMES OF INDIA
+                                    {latestDelivery?.newspaper_name || "YOUR DAILY EDITION"}
                                 </h2>
                             </div>
 
@@ -132,9 +150,9 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
                                     <span className="check-icon-wrap">
                                         <CheckIcon size={14} />
                                     </span>
-                                    <span>DELIVERED AT DOORSTEP</span>
+                                    <span>{latestDelivery ? String(latestDelivery.item_status || latestDelivery.delivery_status).replace(/_/g, " ") : "AWAITING DELIVERY"}</span>
                                 </div>
-                                <span className="delivered-exact-time">7:02 AM IST</span>
+                                <span className="delivered-exact-time">{latestDelivery?.actual_time || latestDelivery?.scheduled_time || "—"}</span>
                             </div>
 
                             {/* Signature decorative newspaper lines from App.jsx */}
@@ -156,7 +174,7 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
                             </span>
 
                             <h3 className="partner-name">
-                                Rahul Patil
+                                {latestDelivery?.partner_name || "Not assigned"}
                             </h3>
 
                             <div className="partner-meta-tag">
@@ -170,7 +188,7 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
                             </span>
 
                             <p className="supplier-details">
-                                <strong>Mumbai Daily Distributors</strong>
+                                <strong>{latestDelivery?.supplier_name || "No supplier assigned"}</strong>
                                 <br />
                                 Hub #14, Central Circle
                             </p>
@@ -200,23 +218,12 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
 
                             <span className="card-kicker">ACTIVE SUBSCRIPTIONS</span>
 
-                            <h3 className="card-heading">3 Daily Papers</h3>
+                            <h3 className="card-heading">{activeSubscriptions.length} Daily Paper{activeSubscriptions.length === 1 ? "" : "s"}</h3>
 
                             <div className="subscription-items-list">
-                                <div className="subscription-row">
-                                    <span className="newspaper-name">The Times of India</span>
-                                    <span className="status-tag active">Active</span>
-                                </div>
-
-                                <div className="subscription-row">
-                                    <span className="newspaper-name">Hindustan Times</span>
-                                    <span className="status-tag active">Active</span>
-                                </div>
-
-                                <div className="subscription-row">
-                                    <span className="newspaper-name">Loksatta</span>
-                                    <span className="status-tag active">Active</span>
-                                </div>
+                                {activeSubscriptions.slice(0, 3).map((subscription) => <div className="subscription-row" key={subscription.subscription_id}>
+                                    <span className="newspaper-name">{subscription.newspaper_name}</span><span className="status-tag active">Active</span>
+                                </div>)}
                             </div>
 
                             <button
@@ -238,11 +245,11 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
 
                             <div className="bill-amount-display">
                                 <span className="currency-symbol">₹</span>
-                                <span className="amount-number">156</span>
+                                <span className="amount-number">{Number(pendingPayment?.total_amount || 0).toFixed(0)}</span>
                             </div>
 
                             <p className="bill-cycle-info">
-                                Cycle: Sep 1 – Sep 10 • <strong>Due Today</strong>
+                                {pendingPayment ? "Current bill • " : "No outstanding bill"}<strong>{pendingPayment ? "Due for payment" : "All caught up"}</strong>
                             </p>
 
                             <button
@@ -261,21 +268,10 @@ function CustomerDashboard({ user, onMenuClick, onNavigate }) {
 
                             <span className="card-kicker">NOTIFICATIONS</span>
 
-                            <h3 className="card-heading">3 New Updates</h3>
+                            <h3 className="card-heading">{unreadNotifications.length} New Update{unreadNotifications.length === 1 ? "" : "s"}</h3>
 
                             <ul className="notification-items-list">
-                                <li>
-                                    <span className="bullet-dot"></span>
-                                    <span>Today's papers delivered on time at 7:02 AM.</span>
-                                </li>
-                                <li>
-                                    <span className="bullet-dot"></span>
-                                    <span>New Sunday Magazine supplement available.</span>
-                                </li>
-                                <li>
-                                    <span className="bullet-dot"></span>
-                                    <span>September invoice statement generated.</span>
-                                </li>
+                                {unreadNotifications.slice(0, 3).map((notification) => <li key={notification.notification_id}><span className="bullet-dot"></span><span>{notification.title}</span></li>)}
                             </ul>
 
                             <button

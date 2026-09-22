@@ -5,6 +5,7 @@ import subscribeIcon from "./icons/subscribe.svg";
 import deliveryIcon from "./icons/delivery.svg";
 import CustomerDashboard from "./CustomerDashboard";
 import CustomerPages from "./CustomerPages";
+import { customerApi } from "./api";
 import "./App.css";
 
 function App() {
@@ -89,26 +90,7 @@ function App() {
         event.currentTarget.elements.password.value;
 
       try {
-        const response = await fetch(
-          "http://localhost:5000/api/login",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              emailOrPhone,
-              password,
-            }),
-          }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          alert(data.message);
-          return;
-        }
+        const data = await customerApi.login({ emailOrPhone, password });
 
         console.log("Logged in user:", data.user);
 
